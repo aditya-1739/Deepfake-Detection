@@ -1,0 +1,13 @@
+dataset_name: "FaceForensics++"
+dataset_version: "C23"
+raw_dir: "datasets/raw/FaceForensics++_C23"
+processed_dir: "datasets/processed"
+metadata_dir: "datasets/metadata"
+train_csv: "datasets/metadata/train.csv"
+val_csv: "datasets/metadata/val.csv"
+num_frames: 15
+image_size: 224
+num_classes: 2
+class_imbalance: 
+  real_weight: 5.0
+  fake_weight: 1.0

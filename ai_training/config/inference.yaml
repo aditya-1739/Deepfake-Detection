@@ -1,0 +1,5 @@
+batch_size: 16
+confidence_threshold: 0.5
+num_frames_to_sample: 10
+face_detector: "mtcnn"
+aggregation_method: "mean"

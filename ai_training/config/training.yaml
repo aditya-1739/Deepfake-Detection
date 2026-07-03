@@ -1,0 +1,10 @@
+batch_size: 32
+num_workers: 4
+epochs: 30
+learning_rate: 0.0001
+weight_decay: 0.0001
+patience: 7
+mixed_precision: true
+seed: 42
+experiments_dir: "../../experiments"
+registry_dir: "../../model_registry"
