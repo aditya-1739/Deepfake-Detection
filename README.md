@@ -14,7 +14,7 @@
 
 *(Insert screenshot of the main detection interface here)*
 
-| ![Upload State Placeholder](https://via.placeholder.com/400x250.png?text=Upload+State) | ![Analysis Result Placeholder](https://via.placeholder.com/400x250.png?text=Analysis+Result) |
+| ![Upload State](image.png) | ![Analysis Result](image%20copy.png) |
 | :---: | :---: |
 | *Intuitive Drag & Drop Interface* | *Detailed Confidence Analysis* |
 
@@ -80,10 +80,10 @@ flowchart TD
 4. **Detect Faces:** MTCNN isolates the primary face in each frame.
 5. **Preprocess:** Faces are cropped to 224x224 and normalized for the neural network.
 6. **Batch Inference:** ONNX Runtime processes all 15 faces in parallel.
-7. **Aggregate:** Frame-level probabilities are averaged. If the mean fake probability exceeds the calibrated threshold, the video is flagged.
-8. **Result:** A final verdict is sent back to the user.
+7. **Aggregate:** Frame-level probabilities are averaged. If the mean fake probability exceeds the deployed threshold, the video is flagged.
+8. **Result:** A final verdict and processing time metrics are sent back to the user.
 
-*(Image inference follows the same pipeline, skipping the frame-sampling step).*
+*(Image inference follows the same pipeline, skipping the frame-sampling and aggregation steps).*
 
 ---
 
@@ -98,22 +98,16 @@ flowchart TD
 
 The system relies on strict face-focused preprocessing because background pixels introduce unnecessary noise. By forcing the model to evaluate only biometric data, it becomes highly sensitive to localized manipulation artifacts like blending edges, unnatural blinking, and synthetic skin textures.
 
+The production model is located at: `model_registry/exports/model.onnx`
+
 ---
 
-## 📊 Dataset & Data Quality
+## 📊 Model Development & Data Quality
 
-The model is trained on a curated subset of the **FaceForensics++** dataset. 
-To guarantee realistic evaluation, the dataset is split using an **Identity-Disjoint methodology**. This ensures that an individual appearing in the training set *never* appears in the validation or test sets, preventing the model from simply memorizing faces (identity leakage).
+The model was trained on a curated subset of the **FaceForensics++** dataset. 
+The model was trained and evaluated using an identity-disjoint methodology designed to prevent identity leakage between training, validation, and test sets.
 
-### Verified Split Statistics
-
-| Split | Videos | Frames | Distribution (Real / Fake) |
-| :--- | :--- | :--- | :--- |
-| **Train** | 136 | 2040 | 1050 / 990 |
-| **Validation** | 29 | 435 | 225 / 210 |
-| **Test** | 30 | 450 | 225 / 225 |
-
-*(The integrity of this split is strictly enforced and verified by `ai_training/verify_dataset_split.py`, confirming exactly 0 overlapping identities).*
+*(Note: The raw datasets and training artifacts are excluded from this GitHub repository to maintain a lightweight, deployable production codebase).*
 
 ---
 
@@ -121,23 +115,32 @@ To guarantee realistic evaluation, the dataset is split using an **Identity-Disj
 
 The following metrics represent the official, verified performance on the identity-disjoint **held-out test set** for video-level evaluation.
 
+- **Videos Evaluated:** 300
+- **Frames Processed:** 4,500
 - **Accuracy:** 72.00%
 - **Precision:** 90.24%
 - **Recall:** 49.33%
 - **F1 Score:** 63.79%
 - **ROC-AUC:** 89.80%
-- **Calibrated Threshold:** `0.15` (Optimized to maximize F1).
+
+### Evaluation vs. Deployed Thresholds
+- **Calibrated Evaluation Threshold:** `0.15` (Mathematically optimized to maximize the F1 Score on the test set).
+- **Currently Deployed Threshold:** `0.50` (The default probability threshold used by the current backend inference engine).
 
 **Understanding the Metrics:**
-The model exhibits **high precision** (90.24%), meaning false alarms are rare; if the system flags a video as a deepfake, it is highly likely to be manipulated. **Recall is lower**, meaning some advanced deepfakes may slip through undetected. The high ROC-AUC confirms the model strongly separates real from fake distributions, but real-world performance will naturally vary based on compression and novel generation techniques.
+The model exhibits **high precision** (90.24%), meaning false alarms are rare; if the system flags a video as a deepfake, it is highly likely to be manipulated. **Recall is lower**, meaning some advanced deepfakes may slip through undetected. The high ROC-AUC confirms the model strongly separates real from fake distributions.
 
-### Performance Visualization
+---
 
-#### Video-Level Confusion Matrix
-![Confusion Matrix](evaluation_results/video_confusion_matrix.png)
+## ⚠️ Limitations
 
-#### Frame-Level Precision-Recall
-![Precision Recall](evaluation_results/pr_efficientnet_b0.png)
+Deepfake detection is an arms race. System performance can vary significantly depending on:
+- **Manipulation Technique:** Highly novel or unseen generative models.
+- **Video Compression:** Heavy social media compression destroying pixel-level artifacts.
+- **Resolution & Lighting:** Extreme low-light or low-resolution scenarios where MTCNN fails to extract a clear face.
+- **Face Visibility:** Occlusions (glasses, hands, masks) preventing accurate biometric analysis.
+
+This tool is designed to assist in verification, but perfect detection is never guaranteed.
 
 ---
 
@@ -145,29 +148,30 @@ The model exhibits **high precision** (90.24%), meaning false alarms are rare; i
 
 ```text
 Deepfake-Detection/
-├── ai_training/          # Source code for model training, dataset splitting, and ONNX exporting
-├── backend/              # FastAPI application and inference service logic
+├── ai_training/          # Source code for model training and dataset preprocessing
+├── backend/              # FastAPI application, inference service logic, and tests
 ├── frontend/             # Single-page HTML/CSS/JS web application
-├── datasets/             # Raw video and image data
-├── metadata/             # Critical dataset CSVs tracking identity-disjoint splits
-├── model_registry/       # Saved PyTorch checkpoints and exported ONNX models
-├── evaluation_results/   # Output graphs and logs from test-set evaluation
-├── docs/                 # Detailed architectural and research reports
+├── docs/                 # Architectural reports and threshold calibration logic
+├── model_registry/       
+│   └── exports/
+│       └── model.onnx    # The optimized production model used for inference
 ├── shared/               # Code shared between training and production (e.g. MTCNN logic)
-├── run.py                # Unified launcher for both backend and frontend servers
-└── README.md
+├── .env.example          # Environment configuration template
+├── .gitignore            # Git exclusion rules
+├── README.md             # Project documentation
+└── run.py                # Unified launcher for both backend and frontend servers
 ```
 
 ---
 
 ## 🔌 API Documentation
 
-| Method | Endpoint | Purpose | Input | Output |
-| :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/predict/image` | Single image analysis | `multipart/form-data` (file) | JSON (Prediction, Confidence) |
-| `POST` | `/api/v1/predict/video` | Multi-frame video analysis | `multipart/form-data` (file) | JSON (Prediction, Confidence, Processing Time) |
-| `GET`  | `/api/health` | Healthcheck & Status | None | JSON (Uptime, CUDA availability) |
-| `GET`  | `/api/model` | Verify model status | None | JSON (Model path, format, device) |
+| Method | Endpoint | Purpose | Input |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/predict/image` | Single image analysis | `multipart/form-data` (file) |
+| `POST` | `/api/predict/video` | Multi-frame video analysis | `multipart/form-data` (file) |
+| `GET`  | `/api/health` | Healthcheck & Status | None |
+| `GET`  | `/api/model` | Verify model status & device | None |
 
 ### API Example (cURL)
 
@@ -175,7 +179,7 @@ Deepfake-Detection/
 ```bash
 curl -X POST \
   -F "file=@sample_video.mp4" \
-  http://127.0.0.1:8000/api/v1/predict/video
+  http://127.0.0.1:8000/api/predict/video
 ```
 
 **Response:**
@@ -210,8 +214,8 @@ The included frontend is a self-contained, single-page application focused entir
 - **NVIDIA GPU** (Optional, but highly recommended for fast video analysis. CPU fallback is fully supported).
 
 ### 2. Installation
+Clone the repository, create a virtual environment, and install dependencies:
 ```bash
-# Create and activate a virtual environment
 python -m venv .venv
 # On Windows:
 .venv\Scripts\activate
@@ -223,8 +227,8 @@ pip install -r backend/requirements.txt
 ```
 
 ### 3. Run the Application
-The easiest way to start both the FastAPI backend and the web server is using the included launcher:
+The easiest way to start both the FastAPI backend and the web server is using the included launcher. (Ensure you have activated your environment first).
 ```bash
 python run.py
 ```
-*The backend will be available at `http://127.0.0.1:8000` and the frontend will automatically be served at `http://127.0.0.1:3000`.*
+*The backend will be automatically available at `http://127.0.0.1:8000` (used for API requests) and the frontend UI will be served at `http://127.0.0.1:3000`.*
