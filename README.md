@@ -14,7 +14,7 @@
 
 *(Insert screenshot of the main detection interface here)*
 
-| ![Upload State](image.png) | ![Analysis Result](image%20copy.png) |
+| ![Upload State](image%20copy.png) | ![Analysis Result](image.png) |
 | :---: | :---: |
 | *Intuitive Drag & Drop Interface* | *Detailed Confidence Analysis* |
 
