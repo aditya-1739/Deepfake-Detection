@@ -223,6 +223,16 @@ class InferenceService:
         }
         
     def predict_video(self, video_bytes: bytes, max_frames=15) -> dict:
+        import psutil
+        import gc
+        process = psutil.Process(os.getpid())
+        def get_ram_mb():
+            return process.memory_info().rss / 1024 / 1024
+
+        DEBUG_MEMORY = False
+        if DEBUG_MEMORY:
+            print(f"[DEBUG_MEMORY] RAM before inference: {get_ram_mb():.2f} MB")
+
         t0 = time.time()
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
             tmp.write(video_bytes)
@@ -243,32 +253,40 @@ class InferenceService:
             else:
                 frame_indices = np.linspace(0, total_frames - 1, max_frames, dtype=int).tolist()
                 
-            frames = []
+            processed_frames = []
+            failed_frames = 0
+            frames_sampled = 0
+
             for idx in frame_indices:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
                 ret, frame = cap.read()
                 if ret:
-                    frames.append(frame)
+                    frames_sampled += 1
+                    pf = self._preprocess_single_frame(frame)
+                    if pf is not None:
+                        processed_frames.append(pf)
+                    else:
+                        failed_frames += 1
             cap.release()
+            gc.collect()
             
-            if not frames:
+            if DEBUG_MEMORY:
+                print(f"[DEBUG_MEMORY] RAM after video decoding/frame preprocessing: {get_ram_mb():.2f} MB")
+
+            if frames_sampled == 0:
                 raise ValueError("No valid frames could be decoded from the video.")
-                
-            # Process frames sequentially for reliable face detection (or ThreadPool if thread-safe)
-            # MTCNN is generally thread-safe, but let's just do sequential for deterministic behavior
-            processed_frames = []
-            failed_frames = 0
-            for f in frames:
-                pf = self._preprocess_single_frame(f)
-                if pf is not None:
-                    processed_frames.append(pf)
-                else:
-                    failed_frames += 1
                     
             if not processed_frames:
-                raise ValueError(f"No recognizable faces detected in any of the {len(frames)} sampled frames.")
+                raise ValueError(f"No recognizable faces detected in any of the {frames_sampled} sampled frames.")
                 
+            if DEBUG_MEMORY:
+                print(f"[DEBUG_MEMORY] RAM immediately before ONNX inference: {get_ram_mb():.2f} MB")
+
             probs = self.predict_images_batch(processed_frames, batch_size=16)
+
+            if DEBUG_MEMORY:
+                print(f"[DEBUG_MEMORY] RAM after ONNX inference: {get_ram_mb():.2f} MB")
+
             if len(probs) == 0:
                 raise RuntimeError("Inference did not return predictions for video frames.")
                 
@@ -278,19 +296,27 @@ class InferenceService:
             
             processing_time_ms = int((time.time() - t0) * 1000)
             
-            return {
+            result = {
                 "success": True,
                 "prediction": decision,
                 "confidence": round(confidence * 100, 2),
                 "mean_fake_probability": mean_fake_prob,
                 "processing_time_ms": processing_time_ms,
                 "frames_processed": len(processed_frames),
-                "frames_sampled": len(frames),
+                "frames_sampled": frames_sampled,
                 "faces_failed": failed_frames,
                 "device": str(self.device),
                 "model_version": f"v1_efficientnet_b0_{self.model_format}"
             }
             
+            del processed_frames
+            del probs
+            gc.collect()
+            if DEBUG_MEMORY:
+                print(f"[DEBUG_MEMORY] RAM after cleanup: {get_ram_mb():.2f} MB")
+
+            return result
+
         finally:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)

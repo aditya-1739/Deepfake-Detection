@@ -41,7 +41,9 @@ class FaceDetector:
         img_pil = Image.fromarray(frame_rgb)
         
         # Detect faces
-        boxes, probs = self.mtcnn.detect(img_pil)
+        import torch
+        with torch.no_grad():
+            boxes, probs = self.mtcnn.detect(img_pil)
         
         if boxes is None or len(boxes) == 0:
             return None, "No face detected"
