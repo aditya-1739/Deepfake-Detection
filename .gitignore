@@ -1,11 +1,41 @@
+# Python environments
 .venv/
-*.pyc
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
-datasets/
-model_registry/
-experiments/
-*.mp4
-*.pt
-*.pth
-*.h5
-*.onnx
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+backend_server.log
+
+# VS Code / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Temporary generated files
+.pytest_cache/
+htmlcov/
+
+# Python tooling
+.mypy_cache/
+.ruff_cache/
+
+# OS / temporary files
+Thumbs.db

@@ -7,6 +7,7 @@ from app.schemas.user import TokenData
 from app.core.security import ALGORITHM
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
@@ -34,3 +35,24 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     # Map _id to string id
     user["id"] = str(user["_id"])
     return user
+
+async def get_optional_current_user(token: str = Depends(oauth2_scheme_optional)):
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+        
+        db = get_db()
+        if db is None:
+            return None
+            
+        user = await db["users"].find_one({"email": email})
+        if user:
+            user["id"] = str(user["_id"])
+            return user
+    except Exception:
+        return None
+    return None
