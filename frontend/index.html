@@ -1050,7 +1050,7 @@
     <!-- Logic -->
     <script>
         // API Base (Preserved from previous implementation)
-        const API_BASE = "http://127.0.0.1:8000/api/v1";
+        const API_BASE = "https://deepfake-detection-raa0.onrender.com/api";
 
         // DOM Elements
         const themeToggle = document.getElementById('themeToggle');
@@ -1214,7 +1214,7 @@
             }, 1500);
 
             const isVideo = currentFile.type.startsWith('video/');
-            const endpoint = isVideo ? '/detect/video' : '/detect/image';
+            const endpoint = isVideo ? '/predict/video' : '/predict/image';
             const formData = new FormData();
             formData.append('file', currentFile);
 
