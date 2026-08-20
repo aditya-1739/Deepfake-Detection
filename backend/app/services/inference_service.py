@@ -223,15 +223,7 @@ class InferenceService:
         }
         
     def predict_video(self, video_bytes: bytes, max_frames=15) -> dict:
-        import psutil
         import gc
-        process = psutil.Process(os.getpid())
-        def get_ram_mb():
-            return process.memory_info().rss / 1024 / 1024
-
-        DEBUG_MEMORY = False
-        if DEBUG_MEMORY:
-            print(f"[DEBUG_MEMORY] RAM before inference: {get_ram_mb():.2f} MB")
 
         t0 = time.time()
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
@@ -269,23 +261,15 @@ class InferenceService:
                         failed_frames += 1
             cap.release()
             gc.collect()
-            
-            if DEBUG_MEMORY:
-                print(f"[DEBUG_MEMORY] RAM after video decoding/frame preprocessing: {get_ram_mb():.2f} MB")
 
             if frames_sampled == 0:
                 raise ValueError("No valid frames could be decoded from the video.")
                     
             if not processed_frames:
                 raise ValueError(f"No recognizable faces detected in any of the {frames_sampled} sampled frames.")
-                
-            if DEBUG_MEMORY:
-                print(f"[DEBUG_MEMORY] RAM immediately before ONNX inference: {get_ram_mb():.2f} MB")
 
             probs = self.predict_images_batch(processed_frames, batch_size=16)
 
-            if DEBUG_MEMORY:
-                print(f"[DEBUG_MEMORY] RAM after ONNX inference: {get_ram_mb():.2f} MB")
 
             if len(probs) == 0:
                 raise RuntimeError("Inference did not return predictions for video frames.")
@@ -312,8 +296,6 @@ class InferenceService:
             del processed_frames
             del probs
             gc.collect()
-            if DEBUG_MEMORY:
-                print(f"[DEBUG_MEMORY] RAM after cleanup: {get_ram_mb():.2f} MB")
 
             return result
 
